@@ -1,0 +1,7 @@
+flask
+flask-cors
+requests
+beautifulsoup4
+sentence-transformers
+qdrant-client
+google-generativeai

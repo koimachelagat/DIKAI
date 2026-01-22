@@ -7,9 +7,9 @@ import requests
 from bs4 import BeautifulSoup
 import sqlite3
 from sentence_transformers import SentenceTransformer
-import numpy as np
 import qdrant_client
 from qdrant_client.http import models
+import google.generativeai as genai
 
 # --------------------------
 # Flask setup
@@ -18,9 +18,15 @@ app = Flask(__name__)
 DB_NAME = "dikai_backend.db"
 
 # --------------------------
+# Gemini setup
+# --------------------------
+genai.configure(api_key="AIzaSyCwsQWomJlBQZFMPb1m3C4TFiJYW1FlQ9Q")
+gemini_model = genai.GenerativeModel("gemini-pro")
+
+# --------------------------
 # Vector DB setup (Qdrant)
 # --------------------------
-VECTOR_DIM = 384  # depends on the embedding model
+VECTOR_DIM = 384
 client = qdrant_client.QdrantClient(":memory:")  # in-memory for local dev
 client.recreate_collection(
     collection_name="daystar_vectors",
@@ -47,7 +53,7 @@ def init_db():
         )
     ''')
 
-    # Repository resources table
+    # Repository table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS repository (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +62,7 @@ def init_db():
         )
     ''')
 
-    # E-learning resources table
+    # Elearning table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS elearning (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,16 +82,10 @@ def health():
     return jsonify({"status": "OK", "service": "DIKAI Backend"})
 
 # --------------------------
-# Scraping and storing
+# Scraper route
 # --------------------------
-@app.route("/api/scraper", methods=["POST"])
+@app.route("/scraper", methods=["POST"])
 def scraper():
-    """
-    Scrapes Daystar websites and stores results in SQLite + Vector DB.
-    Expects JSON:
-    { "type": "courses" / "repository" / "elearning" }
-    """
-
     data = request.json
     scrape_type = data.get("type", "courses")
 
@@ -97,33 +97,29 @@ def scraper():
         response = requests.get(url)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Example: scrape course cards (adjust CSS selectors to real site)
         courses = soup.select(".programs-card")
         for card in courses:
             name = card.select_one(".program-name").text.strip()
             degree = card.select_one(".program-degree").text.strip()
             description = card.select_one(".program-description").text.strip()
 
-            # Insert into SQLite
             cursor.execute(
                 "INSERT INTO courses (name, degree, description) VALUES (?, ?, ?)",
                 (name, degree, description)
             )
             course_id = cursor.lastrowid
 
-            # Vectorize for semantic search
-            text = f"{name} {degree} {description}"
-            vector = model.encode(text).tolist()
+            vector = model.encode(f"{name} {degree} {description}").tolist()
 
-            # Insert into Qdrant
             client.upsert(
                 collection_name="daystar_vectors",
-                points=[models.PointStruct(id=course_id, vector=vector, payload={"type": "courses"})]
+                points=[models.PointStruct(
+                    id=course_id,
+                    vector=vector,
+                    payload={"type": "courses"}
+                )]
             )
 
-    # --------------------------
-    # Repository scraping (example)
-    # --------------------------
     elif scrape_type == "repository":
         url = "https://www.daystar.ac.ke/repository/"
         response = requests.get(url)
@@ -140,16 +136,16 @@ def scraper():
             )
             resource_id = cursor.lastrowid
 
-            # Vectorize
             vector = model.encode(title).tolist()
             client.upsert(
                 collection_name="daystar_vectors",
-                points=[models.PointStruct(id=resource_id, vector=vector, payload={"type": "repository"})]
+                points=[models.PointStruct(
+                    id=resource_id,
+                    vector=vector,
+                    payload={"type": "repository"}
+                )]
             )
 
-    # --------------------------
-    # E-learning scraping (example)
-    # --------------------------
     elif scrape_type == "elearning":
         url = "https://elearning.daystar.ac.ke/"
         response = requests.get(url)
@@ -166,11 +162,14 @@ def scraper():
             )
             elearning_id = cursor.lastrowid
 
-            # Vectorize
             vector = model.encode(title).tolist()
             client.upsert(
                 collection_name="daystar_vectors",
-                points=[models.PointStruct(id=elearning_id, vector=vector, payload={"type": "elearning"})]
+                points=[models.PointStruct(
+                    id=elearning_id,
+                    vector=vector,
+                    payload={"type": "elearning"}
+                )]
             )
 
     conn.commit()
@@ -183,36 +182,39 @@ def scraper():
 # --------------------------
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    """
-    Receives a user question in English or Swahili.
-    Returns top matching result using vector search.
-    """
-
     data = request.json
     message = data.get("message", "")
-    language = data.get("language", "en")
+
+    if not message:
+        return jsonify({"error": "Message is required"}), 400
 
     # Convert message to vector
     query_vector = model.encode(message).tolist()
 
-    # Search top 3 closest points
-    results = client.search(
-        collection_name="daystar_vectors",
-        query_vector=query_vector,
-        limit=3
-    )
+    # Search top 5 closest points in Qdrant
+    try:
+        results = client.search_points(
+            collection_name="daystar_vectors",
+            query_vector=query_vector,
+            limit=5
+        )
+    except Exception as e:
+        return jsonify({"error": f"Vector search failed: {str(e)}"}), 500
 
+    # Retrieve info from SQLite
     answers = []
     for r in results:
         point_id = r.id
-        point_type = r.payload["type"]
+        point_type = r.payload.get("type", "")
 
-        # Fetch actual text from SQLite
-        conn = sqlite3.connect(DB_NAME)
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM {point_type} WHERE id=?", (point_id,))
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT * FROM {point_type} WHERE id=?", (point_id,))
+            row = cursor.fetchone()
+            conn.close()
+        except Exception:
+            continue
 
         if row:
             if point_type == "courses":
@@ -220,15 +222,32 @@ def chat():
             else:
                 answers.append(f"{row[1]} -> {row[2]}")
 
-    # Translate if needed (example static translation)
-    if language == "sw":
-        answers = ["Hili ni jibu la mfano kwa Swahili: " + a for a in answers]
+    if not answers:
+        return jsonify({"answer": "Sorry, I could not find relevant information for your question."})
 
-    return jsonify({"answer": answers})
+    # Send context to Gemini
+    context = "\n".join(answers)
+    prompt = f"""
+You are a helpful university assistant chatbot.
+Answer the user's question clearly using the context below.
+
+Context:
+{context}
+
+Question:
+{message}
+"""
+    try:
+        response = gemini_model.generate_content(prompt)
+        answer_text = response.text
+    except Exception as e:
+        return jsonify({"error": f"Gemini response failed: {str(e)}"}), 500
+
+    return jsonify({"answer": answer_text})
 
 # --------------------------
 # Start server
 # --------------------------
 if __name__ == "__main__":
-    init_db()  # make sure SQLite tables exist
+    init_db()
     app.run(debug=True)
