@@ -1,1 +1,4 @@
 "__pycache__/\n*.pyc\n.env" 
+# Ignore backend files with secrets
+app.py
+dikai_backend.db
