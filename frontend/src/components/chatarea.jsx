@@ -19,7 +19,10 @@ export default function ChatArea() {
     { name: "Student Affairs", icon: "🤝", description: "Clubs & life" },
   ];
 
-  const handleSend = (text) => {
+  // -----------------------------
+  // Updated handleSend to call backend safely
+  // -----------------------------
+  const handleSend = async (text) => {
     const query = text || inputValue;
     if (!query.trim()) return;
 
@@ -27,13 +30,32 @@ export default function ChatArea() {
     setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
 
-    setTimeout(() => {
-      setMessages((prev) => [...prev, { text: "Yes, I can help you with that.", sender: "bot" }]);
-    }, 600);
+    try {
+      const response = await fetch("http://127.0.0.1:5000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: query, language: "en" }),
+      });
+
+      const data = await response.json();
+
+      // Safe handling to avoid blank screen if backend returns undefined
+      const botText = Array.isArray(data.answer)
+        ? data.answer.join("\n")
+        : data.answer || "Sorry, no response.";
+
+      setMessages((prev) => [...prev, { text: botText, sender: "bot" }]);
+    } catch (error) {
+      console.error("Error calling backend:", error);
+      setMessages((prev) => [
+        ...prev,
+        { text: "Error connecting to backend.", sender: "bot" },
+      ]);
+    }
   };
 
   const startNewChat = () => {
-    setMessages([]); // Clears the chat and brings back the hero screen
+    setMessages([]);
     setInputValue("");
   };
 
@@ -75,13 +97,12 @@ export default function ChatArea() {
         </nav>
       </aside>
 
-      
+      {/* Main Chat Area */}
       <main className="flex-1 flex flex-col items-center p-6 md:p-10">
         <div className="w-full max-w-4xl bg-white min-h-[50vh] rounded-[2.5rem] shadow-xl flex flex-col overflow-hidden border border-gray-100 relative">
           
           <div className="flex-1 overflow-y-auto p-10">
             {messages.length === 0 ? (
-              /* Centered Hero View (Logo and Ask me anything) */
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
                 <div className="p-4 bg-blue-50 rounded-full">
                   <img src="/chatbot.png" alt="Bot Logo" className="w-16 h-16 object-contain" />
@@ -94,7 +115,6 @@ export default function ChatArea() {
                 </p>
               </div>
             ) : (
-              /* Active Chat Message List */
               <div className="space-y-6">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
