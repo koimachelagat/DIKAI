@@ -31,10 +31,10 @@ export default function ChatArea() {
     setInputValue("");
 
     try {
-      const response = await fetch("http://127.0.0.1:5000/api/chat", {
+      const response = await fetch("http://127.0.0.1:8000/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: query, language: "en" }),
+        body: JSON.stringify({ question: query, language: "en" }),
       });
 
       const data = await response.json();
@@ -61,7 +61,7 @@ export default function ChatArea() {
 
   return (
     <div className="flex bg-[#f3f4f6] min-h-screen">
-      
+
       {/* Left Sidebar */}
       <aside className={`${isSidebarOpen ? "w-72" : "w-20"} bg-white border-r border-gray-200 transition-all duration-300 flex flex-col shadow-sm`}>
         <div className="p-6 flex items-center justify-between">
@@ -73,7 +73,7 @@ export default function ChatArea() {
 
         {/* NEW CHAT BUTTON */}
         <div className="px-4 mb-6">
-          <button 
+          <button
             onClick={startNewChat}
             className={`w-[80%] flex items-center justify-center gap-2 p-2 bg-[#192f59] text-white rounded-xl hover:bg-[#2a4a8a] transition-all shadow-md ${!isSidebarOpen && "px-0"}`}
           >
@@ -100,7 +100,7 @@ export default function ChatArea() {
       {/* Main Chat Area */}
       <main className="flex-1 flex flex-col items-center p-6 md:p-10">
         <div className="w-full max-w-4xl bg-white min-h-[50vh] rounded-[2.5rem] shadow-xl flex flex-col overflow-hidden border border-gray-100 relative">
-          
+
           <div className="flex-1 overflow-y-auto p-10">
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
@@ -118,11 +118,10 @@ export default function ChatArea() {
               <div className="space-y-6">
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[75%] p-4 px-6 rounded-3xl text-sm md:text-base ${
-                      msg.sender === "user" 
-                      ? "bg-[#192f59] text-white rounded-br-none" 
-                      : "bg-gray-100 text-gray-700 rounded-tl-none"
-                    }`}>
+                    <div className={`max-w-[75%] p-4 px-6 rounded-3xl text-sm md:text-base ${msg.sender === "user"
+                        ? "bg-[#192f59] text-white rounded-br-none"
+                        : "bg-gray-100 text-gray-700 rounded-tl-none"
+                      }`}>
                       {msg.text}
                     </div>
                   </div>
@@ -134,27 +133,27 @@ export default function ChatArea() {
           {/* Input Area */}
           <div className="p-8 bg-white border-t border-gray-50">
             <div className="relative flex items-center mb-6">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Ask your question here..." 
+                placeholder="Ask your question here..."
                 className="w-full p-5 pr-20 bg-gray-50 border border-[#192f59] rounded-2xl transition-all"
               />
-              <button 
+              <button
                 onClick={() => handleSend()}
                 className="absolute right-3 p-3 bg-[#192f59] rounded-xl hover:scale-105 transition-transform"
               >
-                <img src="/send.png" alt="Send" width={24} height={24} className="brightness-0 invert"/>
+                <img src="/send.png" alt="Send" width={24} height={24} className="brightness-0 invert" />
               </button>
             </div>
 
             <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
               <span className="text-gray-400 text-xs font-bold uppercase whitespace-nowrap">Try:</span>
               {suggestions.map((text, i) => (
-                <button 
-                  key={i} 
+                <button
+                  key={i}
                   onClick={() => handleSend(text)}
                   className="whitespace-nowrap px-4 py-2 border border-gray-200 rounded-full text-sm text-gray-500 hover:bg-[#192f59] hover:text-white transition-all">
                   {text}
