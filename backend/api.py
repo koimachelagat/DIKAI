@@ -9,12 +9,11 @@ from dotenv import load_dotenv
 
 # LangChain imports
 from langchain_mongodb import MongoDBAtlasVectorSearch
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from operator import itemgetter
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 # Load environment variables
 load_dotenv()
@@ -25,7 +24,6 @@ GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 DB_NAME = "dikai_memory"
 COLLECTION_NAME = "institutional_knowledge"
 INDEX_NAME = "vector_index"
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 if not MONGO_URI:
     raise ValueError("MONGO_URI environment variable is not set")
@@ -52,10 +50,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Setup embeddings
-embeddings = HuggingFaceEmbeddings(
-    model_name=EMBEDDING_MODEL,
-    model_kwargs={"device": "cpu"}
+# Setup embeddings (using Google's cloud-based embeddings - no local model download needed!)
+embeddings = GoogleGenerativeAIEmbeddings(
+    model="models/embedding-001",
+    google_api_key=GOOGLE_API_KEY
 )
 
 # Setup vector store
