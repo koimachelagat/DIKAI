@@ -31,10 +31,24 @@ export default function ChatArea() {
     setInputValue("");
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/ask", {
+      // Fallback to ngrok if env var is missing
+      let API_URL = import.meta.env.VITE_API_URL || "https://d9df5e0b5e25.ngrok-free.app";
+      console.log("DEBUG: Using API URL:", API_URL);
+
+      // Ensure no trailing slash
+      API_URL = API_URL.replace(/\/$/, "");
+
+      const response = await fetch(`${API_URL}/ask`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: query, language: "en" }),
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({
+          question: query,
+          language: "en",
+          session_id: "default"
+        }),
       });
 
       const data = await response.json();
@@ -44,7 +58,9 @@ export default function ChatArea() {
         ? data.answer.join("\n")
         : data.answer || "Sorry, no response.";
 
-      setMessages((prev) => [...prev, { text: botText, sender: "bot" }]);
+      const sources = data.sources || [];
+
+      setMessages((prev) => [...prev, { text: botText, sender: "bot", sources: sources }]);
     } catch (error) {
       console.error("Error calling backend:", error);
       setMessages((prev) => [
@@ -119,10 +135,28 @@ export default function ChatArea() {
                 {messages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] p-4 px-6 rounded-3xl text-sm md:text-base ${msg.sender === "user"
-                        ? "bg-[#192f59] text-white rounded-br-none"
-                        : "bg-gray-100 text-gray-700 rounded-tl-none"
+                      ? "bg-[#192f59] text-white rounded-br-none"
+                      : "bg-gray-100 text-gray-700 rounded-tl-none"
                       }`}>
                       {msg.text}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200/20">
+                          <p className="text-xs font-bold mb-1 opacity-70">Sources:</p>
+                          <div className="flex flex-col gap-1">
+                            {msg.sources.map((src, idx) => (
+                              <a
+                                key={idx}
+                                href={src}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs underline opacity-80 hover:opacity-100 truncate block text-blue-600 hover:text-blue-800"
+                              >
+                                {src}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
